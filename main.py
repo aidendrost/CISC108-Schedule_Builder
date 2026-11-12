@@ -9,6 +9,7 @@ set_site_information(author = "Aiden Drost",
                      description = "",
                      sources = "",
                      planning = "",
+                     links = ["https://github.com/aidendrost/CISC108-Schedule_Builder/"]
                     )
 
 @dataclass
