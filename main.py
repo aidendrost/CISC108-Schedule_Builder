@@ -16,8 +16,8 @@ set_site_information(author = "Aiden Drost",
 class Course:
     title: str
     creditHours: int
-    durationMWF: int
-    durationTR: int
+    durationMWF: float
+    durationTR: float
 
 @dataclass
 class State:
@@ -30,6 +30,7 @@ class State:
 def index(state: State) -> Page:
     return Page(state, [
                 Header("Welcome to Schedule Builder!"),
+                Button("Add Courses", "addCourse"),
                 Button("Add Time Blocks", "addTimeBlock"),
                 Button("Notes", "addNote"),
                 ])
@@ -39,8 +40,9 @@ def index(state: State) -> Page:
 def addTimeBlock(state: State) -> Page:
     return Page(state, [
                 Header("Select times where classes should not be planned."),
-                Button("", ""),
-                Button("", ""),
+                Button("Schedule", "makeSchedule"),
+                Button("Courses", "addCourse"),
+                Button("Notes", "addNote")
                 ])
 
 @route
@@ -48,10 +50,24 @@ def removeTimeBlock(state: State) -> Page:
     pass
 
 @route
+def createCourse(state: State, title: str, creditHours: int) -> Page:
+    state.courseList.append(Course(title, creditHours, 1.0, 1.5))
+    return addCourse(state)
+
+@route
 def addCourse(state: State) -> Page:
-    return Page(state, [
-                Header("Add your courses below!"),
-                ])
+    components = []
+    components.extend([
+                    Header("Add your courses below."),
+                    TextBox("title", "Course Title"),
+                    TextBox("creditHours", "Credit Hours"),
+                    Button("Submit", "createCourse"),
+                    LineBreak()
+                    ])
+    for course in state.courseList:
+        components.append(Text("Course: " + course.title + ", " + str(course.creditHours) + " credit hours"))
+        components.append(LineBreak())
+    return Page(state, components)
 
 @route
 def removeCourse(state: State) -> Page:
@@ -79,4 +95,4 @@ def makeSchedule(state: State) -> Page:
 
 
 
-start_server()
+start_server(State([], [], [], []))
