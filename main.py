@@ -62,16 +62,21 @@ def addCourse(state: State) -> Page:
                     TextBox("title", "Course Title"),
                     TextBox("creditHours", "Credit Hours"),
                     Button("Submit", "createCourse"),
-                    LineBreak()
+                    LineBreak(),
+                    Button("Home", "index"),
+                    Button("Time Blocks", "addTimeBlock"),
+                    Button("Notes", "addNote")
                     ])
-    for course in state.courseList:
+    for index, course in enumerate(state.courseList):
         components.append(Text("Course: " + course.title + ", " + str(course.creditHours) + " credit hours"))
+        components.append(Button("Remove", "removeCourse", arguments={"index": index}))
         components.append(LineBreak())
     return Page(state, components)
 
 @route
-def removeCourse(state: State) -> Page:
-    pass
+def removeCourse(state: State, index: int) -> Page:
+    state.courseList.pop(index)
+    return addCourse(state)
 
 @route
 def addNote(state: State) -> Page:
