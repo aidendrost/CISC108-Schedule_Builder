@@ -24,6 +24,7 @@ class State:
     courseList: list[Course]      # A list of courses that is added to when the user is on the required courses page.
     timeBlocks: list[int]         # A list of times that should not include any classes. This is altered in the time blocks page.
     userNotes: list[str]          # A list of strings that the user adds to from the user notes page.
+    completedNotes: list[bool]    # A list of booleans that correspond to the index of user notes that have already been written.
     currentSchedule: list[Course] # A list of instances of a Course in order. (May need to add a sub-class that includes the chosen time)
 
 @route
@@ -62,15 +63,17 @@ def addCourse(state: State) -> Page:
                     TextBox("title", "Course Title"),
                     TextBox("creditHours", "Credit Hours"),
                     Button("Submit", "createCourse"),
-                    LineBreak(),
-                    Button("Home", "index"),
-                    Button("Time Blocks", "addTimeBlock"),
-                    Button("Notes", "addNote")
+                    LineBreak()
                     ])
     for index, course in enumerate(state.courseList):
         components.append(Text("Course: " + course.title + ", " + str(course.creditHours) + " credit hours"))
         components.append(Button("Remove", "removeCourse", arguments={"index": index}))
         components.append(LineBreak())
+    components.extend([
+                    Button("Home", "index"),
+                    Button("Time Blocks", "addTimeBlock"),
+                    Button("Notes", "addNote")
+                    ])
     return Page(state, components)
 
 @route
@@ -79,20 +82,46 @@ def removeCourse(state: State, index: int) -> Page:
     return addCourse(state)
 
 @route
+def createNote(state: State, note: str) -> Page:
+    state.userNotes.append(note)
+    state.completedNotes.append(False)
+    return addNote(state)
+
+@route
 def addNote(state: State) -> Page:
-    return Page(state, [
-                Header("Notes"),
-                Button("", ""),
-                Button("", ""),
-                ])
+    components = []
+    components.extend([
+                    Header("Notes"),
+                    TextArea("note", "New note..."),
+                    Button("Submit", "createNote"),
+                    LineBreak()
+                    ])
+    for index, note in enumerate(state.userNotes):
+        components.append(RelatedCheckBox("completed", str(index), default_value=state.completedNotes[index]))
+        components.append(Text(note))
+        components.append(Button("Remove", "removeNote", arguments={"index": index}))
+        components.append(LineBreak())
+    components.extend([
+                    Button("Save Changes", "toggleNote"),
+                    LineBreak(),
+                    Button("Home", "index"),
+                    Button("Courses", "addCourse"),
+                    Button("Schedule", "makeSchedule"),
+                    LineBreak()
+                    ])
+    return Page(state, components)
 
 @route
-def toggleNote(state: State) -> Page:
-    pass
+def toggleNote(state: State, completed: list[str] = []) -> Page:
+    for index in range(len(state.userNotes)):
+        state.completedNotes[index] = str(index) in completed
+    return addNote(state)
 
 @route
-def removeNote(state: State) -> Page:
-    pass
+def removeNote(state: State, index: int) -> Page:
+    state.userNotes.pop(index)
+    state.completedNotes.pop(index)
+    return addNote(state)
 
 @route
 def makeSchedule(state: State) -> Page:
@@ -100,4 +129,4 @@ def makeSchedule(state: State) -> Page:
 
 
 
-start_server(State([], [], [], []))
+start_server(State([], [], [], [], []))
