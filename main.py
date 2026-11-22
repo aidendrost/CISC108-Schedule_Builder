@@ -26,11 +26,17 @@ class scheduledCourse:
     days: str
     startTime: int
     duration: float
+    
+@dataclass
+class timeBlock:
+    day: str
+    startTime: int
+    duration: int
 
 @dataclass
 class State:
     courseList: list[Course]               # A list of courses that is added to when the user is on the required courses page.
-    timeBlocks: list[int]                  # A list of times that should not include any classes. This is altered in the time blocks page.
+    timeBlocks: list[timeBlock]            # A list of times that should not include any classes. This is altered in the time blocks page.
     userNotes: list[str]                   # A list of strings that the user adds to from the user notes page.
     completedNotes: list[bool]             # A list of booleans that correspond to the index of user notes that have already been written.
     currentSchedule: list[scheduledCourse] # A list of instances of a Course in order. (May need to add a sub-class that includes the chosen time)
@@ -45,19 +51,77 @@ def index(state: State) -> Page:
                 Button("Notes", "addNote"),
                 ])
 
+@route
+def createTimeBlock(state: State, day: str, start: str, end: str) -> Page:
+    startTime = convertToMinutes(start)
+    endTime = convertToMinutes(end)
+    if startTime >= endTime:
+        return Page(state, [
+            Header("Invalid Time Block"),
+            Text("The end time must be later than the start time."),
+            Button("Go Back", "addTimeBlock")
+        ])
+    duration = endTime - startTime
+    state.timeBlocks.append(
+        timeBlock(day, startTime, duration)
+    )
+    return addTimeBlock(state)
+
+def convertToMinutes(time: str) -> int:
+    parts = time.split()
+    hourMinute = parts[0].split(":")
+    hour = int(hourMinute[0])
+    minute = int(hourMinute[1])
+    period = parts[1]
+    if period == "PM" and hour != 12:
+        hour += 12
+    elif period == "AM" and hour == 12:
+        hour = 0
+    return hour * 60 + minute
 
 @route
 def addTimeBlock(state: State) -> Page:
-    return Page(state, [
-                Header("Select times where classes should not be planned."),
-                Button("Schedule", "makeSchedule"),
-                Button("Courses", "addCourse"),
-                Button("Notes", "addNote")
-                ])
+    timeOptions = [
+        formatTime(time)
+        for time in range(8 * 60, 17 * 60 + 1, 30)
+    ]
+    components = [
+        Header("Time Blocks"),
+        Text("Select days and times when you do not want classes."),
+        LineBreak(),
+        Text("Day:"),
+        SelectBox("day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]),
+        "Start Time:",
+        SelectBox("start", timeOptions),
+        "End Time:",
+        SelectBox("end", timeOptions),
+        LineBreak(),
+        Button("Add Time Block", "createTimeBlock"),
+        LineBreak(),
+        Header("Your Current Time Blocks")
+    ]
+    for index, block in enumerate(state.timeBlocks):
+        endTime = block.startTime + block.duration
+        components.append(
+            Text(block.day + ": " + formatTime(block.startTime)
+                 + " - " + formatTime(endTime))
+        )
+        components.append(
+            Button("Remove", "removeTimeBlock", arguments={"index": index})
+        )
+        components.append(LineBreak())
+    components.extend([
+        Button("Home", "index"),
+        Button("Courses", "addCourse"),
+        Button("Schedule", "makeSchedule"),
+        Button("Notes", "addNote")
+    ])
+    return Page(state, components)
 
 @route
-def removeTimeBlock(state: State) -> Page:
-    pass
+def removeTimeBlock(state: State, index: int) -> Page:
+    state.timeBlocks.pop(index)
+    return addTimeBlock(state)
 
 @route
 def createCourse(state: State, title: str, creditHours: int) -> Page:
@@ -81,6 +145,7 @@ def addCourse(state: State) -> Page:
     components.extend([
                     Button("Home", "index"),
                     Button("Time Blocks", "addTimeBlock"),
+                    Button("Schedule", "makeSchedule"),
                     Button("Notes", "addNote")
                     ])
     return Page(state, components)
@@ -154,39 +219,40 @@ def makeSchedule(state: State) -> Page:
         ("TR", ("Tuesday", "Thursday"))
     ]
     for course in courses:
-        random.shuffle(patterns)
         placed = False
-        for patternName, days in patterns:
-            if patternName == "MWF":
+        coursePatterns = patterns.copy()
+        random.shuffle(coursePatterns)
+
+        for days, actualDays in coursePatterns:
+            if days == "MWF":
                 duration = int(course.durationMWF * 60)
             else:
                 duration = int(course.durationTR * 60)
-            possibleTimes = list(
-                range(8 * 60, 17 * 60 - duration + 1, 30)
-            )
+            possibleTimes = list(range(8 * 60, 17 * 60, 30))
             random.shuffle(possibleTimes)
+
             for startTime in possibleTimes:
                 conflict = False
-                for scheduled in state.currentSchedule:
-                    sharedDays = any(
-                        day in scheduled.days for day in days
-                    )
-                    if sharedDays and overlaps(
-                        startTime,
-                        duration,
-                        scheduled.startTime,
-                        scheduled.duration
-                    ):
-                        conflict = True
-                        break
+                for block in state.timeBlocks:
+                    if block.day in actualDays:
+                        if overlaps(startTime, duration,
+                                   block.startTime, block.duration):
+                            conflict = True
+                            break
+                if not conflict:
+                    for scheduled in state.currentSchedule:
+                        sharedDays = any(
+                            day in scheduled.days for day in days
+                        )
+                        if sharedDays:
+                            if overlaps(startTime, duration,
+                                       scheduled.startTime,
+                                       scheduled.duration):
+                                conflict = True
+                                break
                 if not conflict:
                     state.currentSchedule.append(
-                        scheduledCourse(
-                            course,
-                            days,
-                            startTime,
-                            duration
-                        )
+                        scheduledCourse(course, days, startTime, duration)
                     )
                     placed = True
                     break
@@ -194,39 +260,52 @@ def makeSchedule(state: State) -> Page:
                 break
         if not placed:
             unscheduled.append(course.title)
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     rows = []
-
-    for time in range(8 * 60, 17 * 60, 30):
-        row = [formatTime(time)]
-
-        for day in days:
+    daysOfWeek = [
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+    ]
+    dayCodes = {
+        "Monday": "M",
+        "Tuesday": "T",
+        "Wednesday": "W",
+        "Thursday": "R",
+        "Friday": "F"
+    }
+    for startTime in range(8 * 60, 17 * 60, 30):
+        row = [formatTime(startTime)]
+        for day in daysOfWeek:
             cell = ""
-
             for scheduled in state.currentSchedule:
-                if day in scheduled.days:
-                    if scheduled.startTime <= time < scheduled.startTime + scheduled.duration:
-                        if time == scheduled.startTime:
-                            cell = scheduled.course.title
-                        else:
-                            cell = "↳"
+                if dayCodes[day] in scheduled.days:
+                    if startTime == scheduled.startTime:
+                        cell = scheduled.course.title
+                        break
+                    elif (startTime > scheduled.startTime and
+                          startTime < scheduled.startTime + scheduled.duration):
+                        cell = "↳"
+                        break
+            if cell == "":
+                for block in state.timeBlocks:
+                    if block.day == day:
+                        if overlaps(startTime, 30,
+                                   block.startTime, block.duration):
+                            cell = "Blocked"
+                            break
             row.append(cell)
         rows.append(row)
+    table = Table(
+        rows,
+        ["Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    )
     components = [
-        Header("Your Weekly Schedule"),
-        Table(
-            rows,
-            ["Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        )
+        Header("Your Schedule"),
+        table
     ]
-    if len(state.courseList) == 0:
-        components.append(Text("You haven't added any courses yet."))
-    if len(unscheduled) > 0:
+    if unscheduled:
         components.append(Header("Courses That Couldn't Be Scheduled"))
         for course in unscheduled:
             components.append(Text(course))
     components.extend([
-        LineBreak(),
         Button("Randomize Again", "makeSchedule"),
         Button("Home", "index"),
         Button("Courses", "addCourse"),
